@@ -31,6 +31,10 @@ Select **Motion artifact**. Point to the distorted trace and low signal quality.
 
 Select **Sustained drift**. The trace moves gradually, multiple vitals change, signal quality stays high, and the agent selects `CAREGIVER`.
 
+**Critical cascade, 15 seconds**
+
+Select **Critical cascade**. Show that the agent carries forward its reason, persistence rule, model version, and delivery state into a downloadable event packet.
+
 **Offline operation, 15 seconds**
 
 Toggle **Offline**. Repeat a scenario and show that local scoring continues. Explain that a target device retains compact event summaries and supports a BLE caregiver handoff.
@@ -46,6 +50,7 @@ Toggle **Offline**. Repeat a scenario and show that local scoring continues. Exp
 | Stable baseline | 12% | 95% | 98% | `MONITOR` |
 | Motion artifact | 18% | 34% | 27% | `RE-MEASURE` |
 | Sustained drift | 82% | 93% | 96% | `CAREGIVER` |
+| Critical cascade | 94% | 96% | 92% | `CLINICIAN` |
 
 These values are deterministic demonstration fixtures, not results from a clinical model.
 

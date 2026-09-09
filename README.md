@@ -23,6 +23,7 @@ Fixed thresholds often miss slow deterioration and can produce nuisance alarms w
 | Stable baseline | 98% | `MONITOR` | Continues routine local scoring |
 | Motion artifact | 27% | `RE-MEASURE` | Rejects the unreliable window instead of escalating |
 | Sustained drift | 96% | `CAREGIVER` | Raises a high-confidence local escalation |
+| Critical cascade | 92% | `CLINICIAN` | Prepares an explanation-rich clinical review packet |
 
 The **Online / Offline** control shows that local inference continues without the cloud. In offline mode, the interface describes local event retention and a BLE caregiver handoff path.
 
@@ -49,8 +50,9 @@ npm run start
 1. Start with **Stable baseline** and note the risk, confidence, signal quality, and `MONITOR` decision.
 2. Select **Motion artifact**. The quality gate rejects the noisy window and changes the action to `RE-MEASURE`.
 3. Select **Sustained drift**. Multiple signals move together, confidence remains high, and the policy escalates to `CAREGIVER`.
-4. Toggle **Offline** and repeat all three scenarios. The decision loop remains active because it does not depend on a cloud response.
-5. Select **Reset** to return to the stable state.
+4. Select **Critical cascade** to show the governed `CLINICIAN` request and download its event packet.
+5. Toggle **Offline** and repeat the scenarios. The decision loop remains active because it does not depend on a cloud response.
+6. Select **Auto demo** for a hands-free judging sequence, or **Reset** to return to the stable state.
 
 See [docs/DEMO_GUIDE.md](docs/DEMO_GUIDE.md) for a 90-second judging script and expected observations.
 
@@ -72,7 +74,7 @@ MONITOR | RE-MEASURE | CAREGIVER | CLINICIAN
 Compact event record and deferred encrypted sync
 ```
 
-The current UI demonstrates the first three outcomes. `CLINICIAN` is part of the planned production policy for persistent, high-confidence risk.
+The UI demonstrates all four policy outcomes with deterministic inputs. These are workflow fixtures, not results from a clinical model.
 
 ## Advanced agentic behavior
 

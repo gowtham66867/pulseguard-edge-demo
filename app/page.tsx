@@ -1,54 +1,402 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, Bluetooth, CloudOff, HeartPulse, Radio, RotateCcw, ShieldCheck, Wifi, WifiOff } from 'lucide-react';
+import {
+  Activity,
+  AlertTriangle,
+  Bluetooth,
+  CheckCircle2,
+  ChevronRight,
+  CloudOff,
+  Cpu,
+  Download,
+  HeartPulse,
+  LockKeyhole,
+  Pause,
+  Play,
+  Radio,
+  RotateCcw,
+  ShieldCheck,
+  Wifi,
+  WifiOff,
+  Zap,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
-type Scenario = 'stable' | 'artifact' | 'drift';
-const paths: Record<Scenario, string> = {
-  stable: 'M0 76 C55 69 75 83 130 71 S215 78 270 68 S350 75 420 66 S505 71 560 64',
-  artifact: 'M0 76 L65 70 L92 16 L110 126 L132 58 L176 72 L242 68 L270 22 L292 118 L318 62 L390 70 L470 67 L560 66',
-  drift: 'M0 91 C80 90 92 84 150 84 S236 76 292 74 S385 58 430 55 S510 39 560 34',
+type Scenario = 'stable' | 'artifact' | 'drift' | 'critical';
+type Action = 'MONITOR' | 'RE-MEASURE' | 'CAREGIVER' | 'CLINICIAN';
+
+type ScenarioState = {
+  label: string;
+  short: string;
+  description: string;
+  risk: number;
+  confidence: number;
+  action: Action;
+  tone: 'green' | 'amber' | 'orange' | 'red';
+  hr: number;
+  spo2: number;
+  temp: number;
+  quality: number;
+  deviations: Array<{ label: string; value: string; delta: string; width: number }>;
+  reason: string;
+  policy: string;
+  waveform: string;
 };
+
+const scenarios: Record<Scenario, ScenarioState> = {
+  stable: {
+    label: 'Stable baseline',
+    short: 'Clean resting signals',
+    description: 'Personal baseline holds across all valid channels.',
+    risk: 12,
+    confidence: 95,
+    action: 'MONITOR',
+    tone: 'green',
+    hr: 72,
+    spo2: 98,
+    temp: 36.8,
+    quality: 98,
+    deviations: [
+      { label: 'Heart rate', value: '72 bpm', delta: '+0.2σ', width: 51 },
+      { label: 'SpO₂', value: '98%', delta: '+0.1σ', width: 49 },
+      { label: 'Temperature', value: '36.8°C', delta: '+0.1σ', width: 50 },
+      { label: 'Activity', value: 'normal', delta: 'baseline', width: 50 },
+    ],
+    reason: 'All channels are valid and remain inside the patient’s learned baseline envelope.',
+    policy: 'Risk below 35% across 8 of 8 valid windows',
+    waveform: 'M0 84 C35 78 55 92 88 80 S145 86 178 76 S235 84 268 73 S325 80 358 70 S415 77 448 67 S505 74 560 65',
+  },
+  artifact: {
+    label: 'Motion artifact',
+    short: 'Walking with a loose sensor',
+    description: 'The quality gate blocks a false escalation.',
+    risk: 18,
+    confidence: 34,
+    action: 'RE-MEASURE',
+    tone: 'amber',
+    hr: 108,
+    spo2: 96,
+    temp: 36.9,
+    quality: 27,
+    deviations: [
+      { label: 'Heart rate', value: '108 bpm', delta: '+2.8σ', width: 82 },
+      { label: 'SpO₂', value: '96%', delta: '−0.8σ', width: 39 },
+      { label: 'Temperature', value: '36.9°C', delta: '+0.2σ', width: 52 },
+      { label: 'IMU motion', value: 'high', delta: '+4.6σ', width: 96 },
+    ],
+    reason: 'IMU motion and PPG distortion agree. This window is unreliable, so risk cannot trigger an alert.',
+    policy: 'Signal quality below 60% forces abstention',
+    waveform: 'M0 84 L52 79 L76 20 L97 137 L121 61 L163 82 L214 77 L246 25 L269 128 L294 66 L343 80 L392 73 L428 33 L452 122 L480 68 L528 76 L560 70',
+  },
+  drift: {
+    label: 'Sustained drift',
+    short: 'Slow multivital deterioration',
+    description: 'Patient-relative change persists across windows.',
+    risk: 82,
+    confidence: 93,
+    action: 'CAREGIVER',
+    tone: 'orange',
+    hr: 86,
+    spo2: 94,
+    temp: 37.2,
+    quality: 96,
+    deviations: [
+      { label: 'Heart rate', value: '86 bpm', delta: '+1.9σ', width: 72 },
+      { label: 'SpO₂', value: '94%', delta: '−2.1σ', width: 25 },
+      { label: 'Temperature', value: '37.2°C', delta: '+1.3σ', width: 66 },
+      { label: 'Activity', value: 'reduced', delta: '−1.7σ', width: 30 },
+    ],
+    reason: 'Heart rate, oxygen saturation, temperature, and activity have moved together for six valid windows.',
+    policy: 'Moderate-to-high risk persisted in 6 of 8 windows',
+    waveform: 'M0 105 C70 104 92 99 145 96 S226 86 280 82 S367 64 418 58 S499 39 560 29',
+  },
+  critical: {
+    label: 'Critical cascade',
+    short: 'Persistent high-risk pattern',
+    description: 'The full escalation packet is prepared locally.',
+    risk: 94,
+    confidence: 96,
+    action: 'CLINICIAN',
+    tone: 'red',
+    hr: 118,
+    spo2: 89,
+    temp: 38.1,
+    quality: 92,
+    deviations: [
+      { label: 'Heart rate', value: '118 bpm', delta: '+4.1σ', width: 96 },
+      { label: 'SpO₂', value: '89%', delta: '−4.4σ', width: 10 },
+      { label: 'Temperature', value: '38.1°C', delta: '+3.0σ', width: 88 },
+      { label: 'Activity', value: 'minimal', delta: '−3.2σ', width: 14 },
+    ],
+    reason: 'High-confidence deterioration persists after caregiver escalation. The agent requests clinical review with context.',
+    policy: 'Risk above 90% in 7 of 8 valid windows',
+    waveform: 'M0 112 C45 111 77 106 112 104 S175 92 215 88 S272 68 315 61 S372 42 414 35 S486 20 560 13',
+  },
+};
+
+const scenarioOrder: Scenario[] = ['stable', 'artifact', 'drift', 'critical'];
+
+function Gauge({ value, tone }: { value: number; tone: ScenarioState['tone'] }) {
+  const radius = 78;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - value / 100);
+  return (
+    <div className="gauge" aria-label={`Deterioration risk ${value} percent`}>
+      <svg viewBox="0 0 190 190" aria-hidden="true">
+        <circle className="gauge-track" cx="95" cy="95" r={radius} />
+        <circle
+          className={`gauge-value tone-${tone}`}
+          cx="95"
+          cy="95"
+          r={radius}
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+        />
+      </svg>
+      <div className="gauge-number">
+        <strong>{value}</strong>
+        <span>% risk</span>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const [scenario, setScenario] = useState<Scenario>('stable');
   const [online, setOnline] = useState(true);
+  const [autoPlay, setAutoPlay] = useState(false);
   const [tick, setTick] = useState(0);
-  useEffect(() => { const timer = setInterval(() => setTick((v) => v + 1), 1200); return () => clearInterval(timer); }, []);
-  const state = useMemo(() => scenario === 'artifact'
-    ? { risk: 18, confidence: 34, action: 'RE-MEASURE', tone: 'amber', hr: 108, spo2: 96, temp: 36.9, quality: 27 }
-    : scenario === 'drift'
-      ? { risk: 82, confidence: 93, action: 'CAREGIVER', tone: 'red', hr: 86, spo2: 94, temp: 37.2, quality: 96 }
-      : { risk: 12, confidence: 95, action: 'MONITOR', tone: 'green', hr: 72, spo2: 98, temp: 36.8, quality: 98 }, [scenario]);
+  const [acknowledged, setAcknowledged] = useState(false);
+  const state = scenarios[scenario];
 
-  return <main className="min-h-screen bg-[#071a28] text-[#eff8fb]">
-    <header className="border-b border-white/10 px-5 py-4 sm:px-8"><div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4">
-      <div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl bg-cyan-300 text-[#071a28]"><HeartPulse size={23}/></div><div><p className="font-semibold tracking-tight">PulseGuard Edge</p><p className="text-xs text-slate-400">Offline-first deterioration monitor</p></div></div>
-      <div className="flex items-center gap-2"><Badge className="border-white/10 bg-white/5 text-slate-300"><Bluetooth size={13}/> ESP32-S3</Badge><Button variant="outline" size="sm" className="border-white/15 bg-transparent text-slate-200 hover:bg-white/10 hover:text-white" onClick={() => setOnline(!online)}>{online ? <Wifi size={15}/> : <WifiOff size={15}/>} {online ? 'Online' : 'Offline'}</Button></div>
-    </div></header>
+  useEffect(() => {
+    const timer = window.setInterval(() => setTick((value) => value + 1), 1100);
+    return () => window.clearInterval(timer);
+  }, []);
 
-    <div className="mx-auto grid max-w-[1440px] gap-5 px-5 py-6 lg:grid-cols-[1.5fr_.8fr] sm:px-8">
-      <section className="space-y-5">
-        <div className="rounded-3xl border border-white/10 bg-[#0c2638] p-5 sm:p-7">
-          <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-cyan-300">Patient 07 · enrolled 18h 42m</p><h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Live physiological stream</h1><p className="mt-2 max-w-2xl text-sm text-slate-400">The model scores a 30-second multivital window locally. No raw waveform leaves this device.</p></div><Badge className={`status-${state.tone}`}>{state.action}</Badge></div>
-          <div className="mt-7 grid gap-5 xl:grid-cols-[1fr_260px]">
-            <div className="relative h-[270px] overflow-hidden rounded-2xl border border-white/10 bg-[#071d2d] p-5"><div className="chart-grid absolute inset-0"/><div className="relative flex items-center justify-between"><span className="text-xs font-medium text-slate-400">FUSED TREND · LAST 5 MINUTES</span><span className="font-mono text-xs text-cyan-300">window {String(tick % 99).padStart(2, '0')}</span></div><svg viewBox="0 0 560 145" className="relative mt-8 w-full overflow-visible" role="img" aria-label="Simulated patient trend"><path d={paths[scenario]} fill="none" stroke={scenario === 'artifact' ? '#f6b84a' : scenario === 'drift' ? '#ff6b6b' : '#67e8f9'} strokeWidth="4" strokeLinecap="round" className="trend-line"/></svg><div className="relative mt-3 flex justify-between text-[11px] text-slate-500"><span>−5m</span><span>−4m</span><span>−3m</span><span>−2m</span><span>−1m</span><span>now</span></div></div>
-            <div className="grid grid-cols-2 gap-3 xl:grid-cols-1">{[['Heart rate', `${state.hr} bpm`], ['SpO₂', `${state.spo2}%`], ['Temperature', `${state.temp}°C`], ['Signal quality', `${state.quality}%`]].map(([label, value]) => <div key={label} className="rounded-2xl bg-white/[.055] px-4 py-3"><p className="text-xs text-slate-400">{label}</p><p className="mt-1 text-xl font-semibold">{value}</p></div>)}</div>
+  useEffect(() => {
+    if (!autoPlay) return;
+    const timer = window.setInterval(() => {
+      setScenario((current) => scenarioOrder[(scenarioOrder.indexOf(current) + 1) % scenarioOrder.length]);
+      setAcknowledged(false);
+    }, 4200);
+    return () => window.clearInterval(timer);
+  }, [autoPlay]);
+
+  const events = useMemo(() => {
+    const base = [
+      { time: '14:32:18', label: state.action, detail: state.policy, tone: state.tone },
+      { time: '14:31:48', label: 'WINDOW SCORED', detail: `Risk ${Math.max(8, state.risk - 7)}% · confidence ${Math.max(30, state.confidence - 2)}%`, tone: 'neutral' },
+      { time: '14:31:18', label: 'QUALITY GATE', detail: `${state.quality}% signal quality · ${state.quality > 60 ? 'accepted' : 'rejected'}`, tone: state.quality > 60 ? 'green' : 'amber' },
+      { time: '14:30:48', label: 'BASELINE CHECK', detail: 'Patient profile v18 · drift guard active', tone: 'neutral' },
+    ];
+    return base;
+  }, [state]);
+
+  const selectScenario = (next: Scenario) => {
+    setScenario(next);
+    setAutoPlay(false);
+    setAcknowledged(false);
+  };
+
+  const resetDemo = () => {
+    setScenario('stable');
+    setAutoPlay(false);
+    setOnline(true);
+    setAcknowledged(false);
+  };
+
+  const downloadPacket = () => {
+    const packet = {
+      prototypeNotice: 'Deterministic simulation. Not for clinical use.',
+      eventId: `PGE-07-${String(tick).padStart(4, '0')}`,
+      patient: 'Patient 07 (pseudonymous demo record)',
+      timestamp: new Date().toISOString(),
+      connectivity: online ? 'online' : 'offline-queued',
+      action: state.action,
+      risk: state.risk,
+      confidence: state.confidence,
+      signalQuality: state.quality,
+      reason: state.reason,
+      policy: state.policy,
+      modelVersion: 'edge-cnn-int8-demo-v0.3',
+      policyVersion: 'safety-policy-demo-v2',
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(packet, null, 2)], { type: 'application/json' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `pulseguard-event-${scenario}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <main className="app-shell">
+      <header className="topbar">
+        <div className="brand-block">
+          <div className="brand-mark"><HeartPulse size={23} /></div>
+          <div>
+            <div className="brand-line"><strong>PulseGuard Edge</strong><span className="live-dot" /> <span className="live-copy">LIVE SIMULATION</span></div>
+            <p>Patient-specific deterioration intelligence</p>
           </div>
         </div>
-        <div className="rounded-3xl border border-white/10 bg-[#0c2638] p-5 sm:p-7">
-          <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-cyan-300">Demo controls</p><h2 className="mt-1 text-xl font-semibold">Challenge the safety logic</h2></div><Button variant="ghost" size="sm" className="text-slate-400 hover:bg-white/10 hover:text-white" onClick={() => setScenario('stable')}><RotateCcw size={15}/> Reset</Button></div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-3"><button className={`scenario ${scenario === 'stable' ? 'selected' : ''}`} onClick={() => setScenario('stable')}><ShieldCheck/><strong>Stable baseline</strong><span>Clean resting signals</span></button><button className={`scenario ${scenario === 'artifact' ? 'selected' : ''}`} onClick={() => setScenario('artifact')}><Activity/><strong>Motion artifact</strong><span>Must not trigger alarm</span></button><button className={`scenario ${scenario === 'drift' ? 'selected' : ''}`} onClick={() => setScenario('drift')}><HeartPulse/><strong>Sustained drift</strong><span>Multisignal deterioration</span></button></div>
+        <div className="header-actions">
+          <Badge className="device-badge"><Bluetooth size={14} /> ESP32-S3 · 31 ms</Badge>
+          <Button className="header-button" variant="outline" size="sm" onClick={() => setOnline((value) => !value)}>
+            {online ? <Wifi size={15} /> : <WifiOff size={15} />}
+            {online ? 'Online' : 'Offline'}
+          </Button>
+          <Button className="present-button" size="sm" onClick={() => setAutoPlay((value) => !value)}>
+            {autoPlay ? <Pause size={15} /> : <Play size={15} />}
+            {autoPlay ? 'Pause demo' : 'Auto demo'}
+          </Button>
         </div>
+      </header>
+
+      <section className={`network-ribbon ${online ? 'online' : 'offline'}`}>
+        <div>
+          {online ? <Radio size={16} /> : <CloudOff size={16} />}
+          <strong>{online ? 'Encrypted event sync available' : 'Edge autonomy active'}</strong>
+          <span>{online ? 'Raw waveforms remain local.' : '1 event queued locally. BLE handoff remains available.'}</span>
+        </div>
+        <span className="ribbon-status">{online ? 'SYNCED' : 'NO CLOUD REQUIRED'}</span>
       </section>
 
-      <aside className="space-y-5">
-        <div className="rounded-3xl border border-white/10 bg-[#0c2638] p-5 sm:p-7"><p className="text-xs font-semibold uppercase tracking-[.18em] text-cyan-300">Edge decision</p><div className="mt-5 flex items-end justify-between"><div><p className="text-sm text-slate-400">Deterioration risk</p><p className="mt-1 text-6xl font-semibold tracking-tight">{state.risk}<span className="text-2xl text-slate-500">%</span></p></div><div className="text-right"><p className="text-xs text-slate-500">confidence</p><p className="text-xl font-semibold">{state.confidence}%</p></div></div><div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10"><div className={`h-full risk-${state.tone} transition-all duration-500`} style={{ width: `${state.risk}%` }}/></div><div className="mt-7 space-y-3">{[['01', 'Condition signal', state.quality > 70 ? 'passed' : 'rejected'], ['02', 'Personalize baseline', '1.0 KB RAM'], ['03', 'INT8 inference', '31 ms'], ['04', 'Confidence gate', state.action]].map(([n, label, value]) => <div key={n} className="flex items-center gap-3 border-b border-white/8 pb-3 last:border-0"><span className="font-mono text-xs text-cyan-300">{n}</span><span className="flex-1 text-sm">{label}</span><span className="text-xs text-slate-400">{value}</span></div>)}</div></div>
-        <div className={`rounded-3xl border p-5 sm:p-6 ${online ? 'border-emerald-400/20 bg-emerald-400/[.07]' : 'border-amber-300/20 bg-amber-300/[.07]'}`}><div className="flex items-start gap-3">{online ? <Radio className="mt-1 text-emerald-300"/> : <CloudOff className="mt-1 text-amber-300"/>}<div><p className="font-semibold">{online ? 'Encrypted sync available' : 'Monitoring continues offline'}</p><p className="mt-1 text-sm leading-6 text-slate-400">{online ? 'Event summaries can synchronize. Raw physiological data remains local.' : 'Events are retained locally; caregiver handoff remains available over BLE.'}</p></div></div></div>
-        <div className="rounded-3xl border border-cyan-300/20 bg-cyan-300/[.07] p-5 sm:p-6"><p className="text-xs font-semibold uppercase tracking-[.18em] text-cyan-300">Prototype status</p><p className="mt-3 text-sm leading-6 text-slate-300">Interactive software demonstration using simulated sensor inputs. Performance figures are design targets pending hardware validation.</p></div>
-      </aside>
-    </div>
-  </main>;
+      <div className="workspace">
+        <section className="patient-surface">
+          <div className="patient-heading">
+            <div>
+              <p className="eyebrow">PATIENT 07 · HOME RECOVERY · ENROLLED 18H 42M</p>
+              <h1>Live physiological stream</h1>
+            </div>
+            <Badge className={`action-badge action-${state.tone}`}>{state.action}</Badge>
+          </div>
+
+          <div className="stream-grid">
+            <div className="wave-panel">
+              <div className="panel-topline">
+                <span>FUSED PATIENT-RELATIVE TREND</span>
+                <span className="mono">WINDOW {String(tick % 99).padStart(2, '0')} · 30 S</span>
+              </div>
+              <div className="wave-stage">
+                <div className="chart-grid" />
+                <div className={`risk-zone zone-${state.tone}`} />
+                <svg viewBox="0 0 560 150" aria-label={`Simulated ${state.label.toLowerCase()} trend`}>
+                  <path d={state.waveform} fill="none" className={`trend tone-${state.tone}`} />
+                </svg>
+                <div className="trend-marker"><span>personal baseline</span></div>
+              </div>
+              <div className="time-axis"><span>−5m</span><span>−4m</span><span>−3m</span><span>−2m</span><span>−1m</span><span>now</span></div>
+            </div>
+
+            <div className="risk-panel">
+              <div className="risk-heading"><span>EDGE RISK SCORE</span><span className="confidence"><ShieldCheck size={14} /> {state.confidence}% confidence</span></div>
+              <Gauge value={state.risk} tone={state.tone} />
+              <div className="decision-copy">
+                <strong>{state.label}</strong>
+                <p>{state.description}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="baseline-section">
+            <div className="section-heading">
+              <div><p className="eyebrow">PERSONAL BASELINE</p><h2>Deviation from this patient’s normal</h2></div>
+              <span className="baseline-age">PROFILE v18 · UPDATED 4m AGO</span>
+            </div>
+            <div className="deviation-grid">
+              {state.deviations.map((item) => (
+                <div className="deviation" key={item.label}>
+                  <div className="deviation-label"><span>{item.label}</span><strong>{item.value}</strong></div>
+                  <div className="deviation-track"><span className={`deviation-fill tone-${state.tone}`} style={{ width: `${item.width}%` }} /></div>
+                  <div className="deviation-meta"><span>personal range</span><span>{item.delta}</span></div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="scenario-section">
+            <div className="section-heading compact">
+              <div><p className="eyebrow">CHALLENGE THE AGENT</p><h2>Reproducible safety scenarios</h2></div>
+              <Button variant="ghost" size="sm" className="reset-button" onClick={resetDemo}><RotateCcw size={15} /> Reset</Button>
+            </div>
+            <div className="scenario-grid">
+              {(Object.keys(scenarios) as Scenario[]).map((key, index) => {
+                const item = scenarios[key];
+                return (
+                  <button key={key} className={`scenario-card ${scenario === key ? 'selected' : ''}`} onClick={() => selectScenario(key)}>
+                    <span className="scenario-index">0{index + 1}</span>
+                    <span className={`scenario-icon icon-${item.tone}`}>{key === 'stable' ? <CheckCircle2 /> : key === 'artifact' ? <Activity /> : <HeartPulse />}</span>
+                    <strong>{item.label}</strong>
+                    <small>{item.short}</small>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        <aside className="agent-rail">
+          <section className="agent-card primary-card">
+            <div className="card-heading">
+              <div><p className="eyebrow">EDGE AGENT REASONING</p><h2>Why this action?</h2></div>
+              <span className={`pulse-orb orb-${state.tone}`} />
+            </div>
+            <div className="reason-box">
+              <p>{state.reason}</p>
+              <div className="policy-line"><LockKeyhole size={14} /><span>{state.policy}</span></div>
+            </div>
+            <div className="agent-steps">
+              {[
+                ['01', 'Observe', `${state.quality}% quality`, state.quality > 60],
+                ['02', 'Contextualize', 'patient v18', true],
+                ['03', 'Infer', `${state.risk}% · 31 ms`, state.quality > 60],
+                ['04', 'Act', state.action, true],
+              ].map(([number, label, value, passed]) => (
+                <div className="agent-step" key={String(number)}>
+                  <span className="step-number">{number}</span>
+                  <span className="step-copy"><strong>{label}</strong><small>{value}</small></span>
+                  {passed ? <CheckCircle2 className="step-pass" size={17} /> : <AlertTriangle className="step-warn" size={17} />}
+                </div>
+              ))}
+            </div>
+            {state.action === 'CAREGIVER' || state.action === 'CLINICIAN' ? (
+              <Button className={`ack-button ack-${state.tone}`} onClick={() => setAcknowledged(true)} disabled={acknowledged}>
+                {acknowledged ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}
+                {acknowledged ? 'Escalation acknowledged' : `Acknowledge ${state.action.toLowerCase()} event`}
+              </Button>
+            ) : null}
+            <Button variant="outline" className="packet-button" onClick={downloadPacket}><Download size={16} /> Download event packet</Button>
+          </section>
+
+          <section className="agent-card event-card">
+            <div className="card-heading compact-heading">
+              <div><p className="eyebrow">AUDITABLE MEMORY</p><h2>Local event timeline</h2></div>
+              <span className="event-count">4 EVENTS</span>
+            </div>
+            <div className="event-list">
+              {events.map((event, index) => (
+                <div className="event-row" key={`${event.time}-${event.label}`}>
+                  <span className={`event-dot dot-${event.tone}`} />
+                  <span className="event-time">{event.time}</span>
+                  <span className="event-copy"><strong>{event.label}</strong><small>{event.detail}</small></span>
+                  {index === 0 ? <ChevronRight size={16} /> : null}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="agent-card telemetry-card">
+            <div className="telemetry-item"><Cpu /><span><small>INT8 INFERENCE</small><strong>31 ms</strong></span></div>
+            <div className="telemetry-item"><Zap /><span><small>MODEL FOOTPRINT</small><strong>48 KB</strong></span></div>
+            <div className="telemetry-item"><LockKeyhole /><span><small>RAW DATA SENT</small><strong>0 bytes</strong></span></div>
+          </section>
+
+          <p className="prototype-note">Interactive deterministic simulation. Engineering figures are design targets pending hardware validation. Clinical decision support research only.</p>
+        </aside>
+      </div>
+    </main>
+  );
 }
