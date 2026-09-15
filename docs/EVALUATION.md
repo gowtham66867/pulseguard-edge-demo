@@ -1,5 +1,17 @@
 # Evaluation plan and test harness
 
+## What is already tested
+
+The browser build ships an executable subset of this plan. `npm test` runs 42 tests in
+`tests/` against the real engine and browser verification harness, covering the quality gate, the int8 model,
+baseline guardrails, the escalation ladder, offline recovery and the audit log. Each
+scenario is also asserted to land in the range printed in `docs/DEMO_GUIDE.md`, so the
+documentation cannot silently drift from the implementation.
+
+What that subset does **not** cover, and what the rest of this document plans for: a
+trained model, real sensor data, subgroup calibration, and any measurement taken on
+hardware rather than in a browser.
+
 ## Evaluation goals
 
 The evaluation program must answer five questions:

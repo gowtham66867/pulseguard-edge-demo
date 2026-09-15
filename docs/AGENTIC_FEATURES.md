@@ -31,12 +31,16 @@ No unrestricted conversation history, cloud dependency, or autonomous model retr
 Risk alone does not trigger action. The policy also checks whether the measurement is trustworthy and whether the model is confident enough to act. A conformal or calibrated uncertainty layer is planned for the hardware model.
 
 ```text
-if signal_quality < quality_floor:
+if signal_quality < 60:            # window is excluded from the policy buffer entirely
     action = RE_MEASURE
-else if confidence < confidence_floor:
+else if confidence < 70:           # measurement is usable, model is not resolved
     action = RE_MEASURE
-else if risk persists for N of the last M valid windows:
-    action = CAREGIVER or CLINICIAN
+else if risk >= 88 in 5 of last 8 valid windows and stage >= CAREGIVER:
+    action = CLINICIAN             # the ladder is never skipped
+else if risk >= 55 in 4 of last 6 valid windows:
+    action = CAREGIVER
+else if an escalation is already open:
+    action = hold                  # only a human acknowledgement releases it
 else:
     action = MONITOR
 ```
