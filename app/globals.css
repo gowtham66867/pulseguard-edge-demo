@@ -384,6 +384,26 @@ h2 { margin: 5px 0 0; font-size: 19px; letter-spacing: -.025em; }
 .evidence-boundary > a { flex-direction: row; align-items: center; gap: 8px; color: var(--primary); font-size: 13px; text-decoration: none; white-space: nowrap; }
 .evidence-boundary > a:hover { background: rgb(98 231 239 / 8%); }
 
+/* A deliberately explicit integration boundary: this panel is a browser-side
+   protocol emulator, so judges can inspect the device contract without being
+   misled into thinking the tab is connected to a physical MCU. */
+.hardware-twin { margin-top: 16px; padding: 19px; border: 1px solid rgb(248 193 95 / 26%); border-radius: 18px; background: linear-gradient(112deg, rgb(248 193 95 / 7%), rgb(4 20 30 / 72%) 40%); }
+.hardware-twin-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; }
+.hardware-twin h3 { margin: 5px 0 0; font-size: 18px; letter-spacing: -.025em; }
+.hardware-twin p:not(.eyebrow) { max-width: 640px; margin: 6px 0 0; color: #8ca4ad; font-size: 12px; line-height: 1.5; }
+.hardware-twin-grid { display: grid; grid-template-columns: 1.45fr 1fr; gap: 12px; margin-top: 15px; }
+.firmware-contract { min-height: 102px; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 14px 15px; border: 1px solid rgb(98 231 239 / 20%); border-radius: 12px; background: #061b27; overflow: hidden; }
+.firmware-contract code { overflow-x: auto; color: #a7f6ef; font: 11px/1.55 var(--font-geist-mono); white-space: nowrap; }
+.firmware-contract small { color: #708994; font-size: 10px; }
+.firmware-led { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 13px rgb(66 223 160 / 80%); }
+.handoff-spec { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--border); }
+.handoff-spec > div { min-height: 50px; display: flex; flex-direction: column; justify-content: center; padding: 10px; background: rgb(4 20 30 / 94%); }
+.handoff-spec small { color: #718a95; font: 8px var(--font-geist-mono); letter-spacing: .06em; }.handoff-spec strong { margin-top: 4px; font-size: 11px; }
+.firmware-pipeline { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin-top: 13px; }
+.firmware-pipeline span { min-height: 41px; display: flex; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 9px; color: #b8cbd1; font-size: 10px; line-height: 1.2; background: rgb(2 14 22 / 45%); }
+.firmware-pipeline b { color: var(--amber); font: 8px var(--font-geist-mono); }
+.hardware-source { display: inline-flex; align-items: center; gap: 6px; margin-top: 15px; color: #ffd783; font-size: 11px; text-decoration: none; }.hardware-source:hover { color: #fff1c6; }
+
 @keyframes scanPulse { to { transform: scaleY(.55); opacity: .45; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin .9s linear infinite; }
@@ -399,6 +419,7 @@ h2 { margin: 5px 0 0; font-size: 19px; letter-spacing: -.025em; }
   .proof-scoreboard { grid-template-columns: repeat(4, 1fr); }
   .proof-scoreboard .proof-verdict { grid-column: 1 / -1; }
   .proof-grid { grid-template-columns: 1fr; }
+  .firmware-pipeline { grid-template-columns: repeat(3, 1fr); }
 }
 
 @media (max-width: 760px) {
@@ -424,6 +445,9 @@ h2 { margin: 5px 0 0; font-size: 19px; letter-spacing: -.025em; }
   .architecture-node:nth-child(2) i, .architecture-node:nth-child(4) i { display: none; }
   .architecture-node:nth-child(3) i { display: grid; }
   .evidence-boundary { grid-template-columns: 1fr; }
+  .hardware-twin-head, .hardware-twin-grid { grid-template-columns: 1fr; flex-direction: column; }
+  .hardware-twin-grid { display: grid; }
+  .firmware-pipeline { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 480px) {

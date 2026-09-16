@@ -32,6 +32,7 @@ import { Badge } from '@/components/ui/badge';
 import { POLICY, PulseGuardAgent, type Snapshot } from '@/lib/agent';
 import { runProofSuite, type ProofReport } from '@/lib/evaluation';
 import { MODEL_VERSION, POLICY_VERSION } from '@/lib/model';
+import { encodeFirmwareFrame, toFirmwareFrame } from '@/lib/firmware';
 import { type ScenarioId, WINDOW_SECONDS } from '@/lib/signal';
 
 /** Wall-clock pacing of the simulated 30 s window, in milliseconds. */
@@ -285,6 +286,7 @@ export default function Home() {
   // forward pass a few times, so it is withheld on the first windows. That also
   // keeps the server-rendered markup identical to the first client render.
   const measured = snap.micros > 0 ? `${snap.micros.toFixed(2)} µs` : 'measuring…';
+  const firmwareFrame = encodeFirmwareFrame(toFirmwareFrame(snap));
 
   const downloadPacket = () => {
     const packet = agent.openPacket();
@@ -651,6 +653,38 @@ export default function Home() {
             </div>
           ))}
         </div>
+
+        <section className="hardware-twin" aria-labelledby="hardware-twin-title">
+          <div className="hardware-twin-head">
+            <div>
+              <p className="eyebrow">DEVICE HANDOFF · PROTOCOL EMULATOR</p>
+              <h3 id="hardware-twin-title">Firmware integration twin</h3>
+              <p>One inspectable contract from simulated signal window to a future ESP32-S3 serial or BLE bridge.</p>
+            </div>
+            <span className="evidence-chip target">HARDWARE PROFILING PENDING</span>
+          </div>
+          <div className="hardware-twin-grid">
+            <div className="firmware-contract">
+              <span className="firmware-led" aria-hidden="true" />
+              <code>{firmwareFrame}</code>
+              <small>Live browser-emitted PGE/1 frame · not a live device UART feed</small>
+            </div>
+            <div className="handoff-spec">
+              <div><small>TARGET</small><strong>ESP32-S3 · ESP-IDF</strong></div>
+              <div><small>SENSOR BUS</small><strong>I²C optics + IMU</strong></div>
+              <div><small>ARITHMETIC</small><strong>int8 / int32</strong></div>
+              <div><small>TEST HOOK</small><strong>Golden PGE/1 frames</strong></div>
+            </div>
+          </div>
+          <div className="firmware-pipeline" aria-label="Firmware handoff stages">
+            {['I²C capture', 'Quality gate', 'Fixed-point infer', 'Persistence policy', 'UART / BLE event'].map((stage, index) => (
+              <span key={stage}><b>{String(index + 1).padStart(2, '0')}</b>{stage}</span>
+            ))}
+          </div>
+          <a className="hardware-source" href="https://github.com/gowtham66867/pulseguard-edge-demo/tree/main/firmware/esp32" target="_blank" rel="noreferrer">
+            Inspect firmware handoff notes <ExternalLink size={14} />
+          </a>
+        </section>
 
         {proofState === 'idle' ? (
           <div className="proof-idle">
