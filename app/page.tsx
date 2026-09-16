@@ -39,6 +39,7 @@ import { type ScenarioId, WINDOW_SECONDS } from '@/lib/signal';
 const WINDOW_PERIOD_MS = 950;
 /** How long the hands-free tour holds each scenario. */
 const AUTO_DWELL_MS = 9_000;
+const JUDGE_DWELL_MS = 6_500;
 
 type ScenarioMeta = { id: ScenarioId; label: string; short: string; hint: string };
 
@@ -48,6 +49,14 @@ const SCENARIOS: ScenarioMeta[] = [
   { id: 'drift', label: 'Sustained drift', short: 'Slow multivital deterioration', hint: 'Expect CAREGIVER' },
   { id: 'critical', label: 'Critical cascade', short: 'Persistent high-risk pattern', hint: 'Expect CLINICIAN' },
 ];
+
+const JUDGE_SEQUENCE = [
+  { scenario: 'stable' as const, online: true, title: '1 · Establish the personal baseline', copy: 'Clean windows update only the bounded patient profile. No raw waveform leaves the device.' },
+  { scenario: 'artifact' as const, online: true, title: '2 · Reject motion artifact', copy: 'A loose sensor is identified as poor-quality data. The agent abstains and requests a re-measure.' },
+  { scenario: 'drift' as const, online: true, title: '3 · Require persistent deterioration', copy: 'A single abnormal window is not enough. The caregiver rung opens only after the policy persistence rule is met.' },
+  { scenario: 'critical' as const, online: false, title: '4 · Stay safe with no uplink', copy: 'Critical deterioration escalates locally; the event is retained for later sync while connectivity is absent.' },
+  { scenario: 'stable' as const, online: true, title: '5 · Close the loop with a human', copy: 'Connectivity returns and the queued event can be acknowledged. The agent never silently clears an open alert.' },
+] as const;
 
 /* ------------------------------------------------------------------ *
  * Presentation components
@@ -177,6 +186,8 @@ export default function Home() {
   const [scenario, setScenario] = useState<ScenarioId>('stable');
   const [streaming, setStreaming] = useState(true);
   const [autoTour, setAutoTour] = useState(false);
+  const [judgeRun, setJudgeRun] = useState(false);
+  const [judgeStep, setJudgeStep] = useState(0);
   const [showRoutine, setShowRoutine] = useState(false);
   const [proofState, setProofState] = useState<'idle' | 'running' | 'complete'>('idle');
   const [proof, setProof] = useState<ProofReport | null>(null);
@@ -210,6 +221,30 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, [autoTour, agent]);
 
+  // A focused, 32-second judge flow that demonstrates a full care loop rather
+  // than hoping a presenter manually reaches the right controls in the right order.
+  useEffect(() => {
+    if (!judgeRun) return;
+    const applyStep = (index: number) => {
+      const step = JUDGE_SEQUENCE[index];
+      agent.setScenario(step.scenario);
+      agent.setOnline(step.online);
+      setScenario(step.scenario);
+      setSnap(agent.snapshot());
+    };
+    applyStep(judgeStep);
+    const timer = window.setTimeout(() => {
+      if (judgeStep === JUDGE_SEQUENCE.length - 1) {
+        agent.acknowledge();
+        setSnap(agent.snapshot());
+        setJudgeRun(false);
+      } else {
+        setJudgeStep((current) => current + 1);
+      }
+    }, JUDGE_DWELL_MS);
+    return () => window.clearTimeout(timer);
+  }, [agent, judgeRun, judgeStep]);
+
   const toggleOnline = useCallback(() => {
     agent.setOnline(!agent.isOnline());
     setSnap(agent.snapshot());
@@ -219,6 +254,8 @@ export default function Home() {
     agent.reset();
     setScenario('stable');
     setAutoTour(false);
+    setJudgeRun(false);
+    setJudgeStep(0);
     setStreaming(true);
     setSnap(agent.step());
   }, [agent]);
@@ -287,6 +324,13 @@ export default function Home() {
   // keeps the server-rendered markup identical to the first client render.
   const measured = snap.micros > 0 ? `${snap.micros.toFixed(2)} µs` : 'measuring…';
   const firmwareFrame = encodeFirmwareFrame(toFirmwareFrame(snap));
+  const startJudgeRun = useCallback(() => {
+    agent.reset();
+    setAutoTour(false);
+    setStreaming(true);
+    setJudgeStep(0);
+    setJudgeRun(true);
+  }, [agent]);
 
   const downloadPacket = () => {
     const packet = agent.openPacket();
@@ -380,6 +424,10 @@ export default function Home() {
             {autoTour ? <Pause size={15} /> : <Play size={15} />}
             <span className="button-label">{autoTour ? 'Stop tour' : 'Auto demo'}</span>
           </Button>
+          <Button className="judge-button" size="sm" onClick={judgeRun ? () => setJudgeRun(false) : startJudgeRun}>
+            {judgeRun ? <Pause size={15} /> : <Siren size={15} />}
+            <span className="button-label">{judgeRun ? 'Stop judge run' : 'Judge run'}</span>
+          </Button>
         </div>
       </header>
 
@@ -395,6 +443,14 @@ export default function Home() {
         </div>
         <span className="ribbon-status">{snap.online ? 'SYNCED' : 'NO CLOUD REQUIRED'}</span>
       </section>
+
+      {judgeRun ? (
+        <section className="judge-narrative" aria-live="polite">
+          <div className="judge-progress" aria-hidden="true"><span style={{ width: `${((judgeStep + 1) / JUDGE_SEQUENCE.length) * 100}%` }} /></div>
+          <div><p className="eyebrow">GUIDED DEMO · {Math.ceil((JUDGE_DWELL_MS * (JUDGE_SEQUENCE.length - judgeStep)) / 1000)} SECONDS REMAINING</p><strong>{JUDGE_SEQUENCE[judgeStep].title}</strong><p>{JUDGE_SEQUENCE[judgeStep].copy}</p></div>
+          <span>{judgeStep + 1} / {JUDGE_SEQUENCE.length}</span>
+        </section>
+      ) : null}
 
       <div className="workspace">
         <section className="patient-surface">

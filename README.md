@@ -2,7 +2,7 @@
 
 Offline-first Edge AI for continuous patient deterioration monitoring.
 
-[Live prototype](https://pulseguard-edge-demo.trilogy-1207.chatgpt.site/) · [Architecture](docs/ARCHITECTURE.md) · [Agentic features](docs/AGENTIC_FEATURES.md) · [Evaluation plan](docs/EVALUATION.md) · [Demo guide](docs/DEMO_GUIDE.md)
+[Live prototype](https://pulseguard-edge-demo.trilogy-1207.chatgpt.site/) · [Judge run](docs/JUDGE_DEMO_RUNBOOK.md) · [Architecture](docs/ARCHITECTURE.md) · [Agentic features](docs/AGENTIC_FEATURES.md) · [Evaluation plan](docs/EVALUATION.md) · [Hardware references](docs/OPEN_SOURCE_REFERENCES.md)
 
 PulseGuard Edge analyzes short multivital windows locally, learns a bounded personal baseline, rejects unreliable measurements, and chooses a proportional response. The device keeps monitoring when the network is unavailable and synchronizes compact event summaries after connectivity returns.
 
@@ -23,7 +23,7 @@ The demo is not a slideshow of canned results. Every number on screen is compute
 | Policy and escalation | Quality gate → confidence gate → persistence over a ring buffer | [`lib/agent.ts`](lib/agent.ts) |
 | Audit log, offline queue, sync | Bounded event log with delivery and acknowledgement state | [`lib/agent.ts`](lib/agent.ts) |
 
-Because the generator is seeded, the whole pipeline is reproducible: the same scenario and window index yield the same samples, the same score and the same decision on any machine. 42 automated tests assert exactly that.
+Because the generator is seeded, the whole pipeline is reproducible: the same scenario and window index yield the same samples, the same score and the same decision on any machine. 44 automated tests assert exactly that, including the browser-to-device `PGE/1` protocol contract.
 
 The model weights are **hand-authored and interpretable**, encoding four clinically-motivated hidden features. They are not trained, and they are not a clinical model. Replacing them with a model trained and calibrated on replay data is the first item in [docs/EVALUATION.md](docs/EVALUATION.md).
 
@@ -76,7 +76,8 @@ Open the local URL printed by the development server.
 5. Toggle **Offline** and repeat. The decision loop is unchanged; the ribbon and event timeline show what is being retained locally.
 6. Switch the event timeline to **Every window** to see the full audit trail rather than just the decisions.
 7. Scroll to **Edge Safety Verification Lab** and press **Run proof suite**. It executes a 612-window adversarial replay against the same agent classes, then exports a machine-readable evidence report.
-8. Use **Auto demo** for a hands-free sequence, or **Reset** to return to the enrolled state.
+8. Use **Judge run** for a guided 35-second care story: baseline → artifact rejection → persistent drift → offline critical escalation → human closure.
+9. Use **Auto demo** for an open-ended hands-free sequence, or **Reset** to return to the enrolled state.
 
 Keyboard: <kbd>1</kbd>–<kbd>4</kbd> scenario, <kbd>O</kbd> connectivity, <kbd>A</kbd> auto demo, <kbd>Space</kbd> pause, <kbd>R</kbd> reset.
 
@@ -156,13 +157,15 @@ lib/signal.ts             Seeded sensor simulation and the signal-quality gate
 lib/model.ts              INT8 quantized model, calibration, bounded baseline
 lib/agent.ts              Policy engine, escalation ladder, audit log, offline queue
 lib/evaluation.ts         Browser-safe 612-window verification harness
-tests/*.test.ts           42 automated tests covering engine and harness
+tests/*.test.ts           44 automated tests covering engine, harness and device-frame contract
 app/page.tsx              Interactive surface bound to the live agent
 app/globals.css           Visual system and responsive states
 docs/ARCHITECTURE.md      Software, firmware, data and trust boundaries
 docs/AGENTIC_FEATURES.md  Bounded autonomous loop and safety controls
 docs/DEMO_GUIDE.md        Setup, walkthrough and judging script
 docs/EVALUATION.md        Test matrix, harness design, metrics and gates
+docs/JUDGE_DEMO_RUNBOOK.md Scripted 35-second judge-facing care workflow
+docs/OPEN_SOURCE_REFERENCES.md Hardware implementation references and evidence boundaries
 ```
 
 ## Verification
